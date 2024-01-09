@@ -1,0 +1,20 @@
+{
+    "name": "utlagat/dapsides",
+    "description": "API integration DapSides Eurologistica",
+    "type": "library",
+    "minimum-stability": "dev",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "Utlagat\\Dapsides\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "utlagat",
+            "email": "utlagat@gmail.com"
+        }
+    ],
+    "require": {
+    }
+}
