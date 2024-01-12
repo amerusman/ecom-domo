@@ -4,10 +4,10 @@
 namespace App\Services;
 
 
+use App\Events\checkOutEvent;
 use App\Helpers\SiteHelper;
 use App\Models\Coupon;
 use App\Models\Product;
-use Illuminate\Session\SessionManager;
 use Illuminate\Support\Collection;
 
 class CartService
@@ -19,9 +19,9 @@ class CartService
 
     protected float $total = 0;
     protected float $subtotal = 0;
-    protected float $vat= 0;
-    protected float $discount= 0;
-    protected float $discountCoupon= 0;
+    protected float $vat = 0;
+    protected float $discount = 0;
+    protected float $discountCoupon = 0;
 
     /**
      * Constructs a new cart object.
@@ -43,18 +43,16 @@ class CartService
      */
     public function add($id, int $quantity = 1, array $options = []): void
     {
+
         if (is_array($id)) {
             $products = Product::find($id);
-        }
-        else {
+        } else {
             $products = [Product::findOrFail($id)];
         }
-
+        event(new checkOutEvent($products,'add_to_cart'));
         $content = $this->getContent();
-        foreach ($products as $product)
-        {
-            if ($product->active && $product->in_stock)
-            {
+        foreach ($products as $product) {
+            if ($product->active && $product->in_stock) {
                 $cartItem = $this->createCartItem($product->name, $product->price, $quantity, $options);
 
                 if ($content->has($product->id)) {
@@ -66,6 +64,66 @@ class CartService
         }
 
         $this->putContent($content);
+    }
+
+    /**
+     * Returns the content of the cart.
+     *
+     * @return Illuminate\Support\Collection
+     */
+    protected function getContent(): Collection
+    {
+        return $this->get()['content'];
+    }
+
+    protected function get(): array
+    {
+        return $this->session->has(self::DEFAULT_INSTANCE) ? $this->session->get(self::DEFAULT_INSTANCE) : [
+            'content' => collect([]),
+            'order_id' => null,
+            'coupon' => null,
+        ];
+    }
+
+    /**
+     * Creates a new cart item from given inputs.
+     *
+     * @param string $name
+     * @param string $price
+     * @param string $quantity
+     * @param array $options
+     * @return Illuminate\Support\Collection
+     */
+    protected function createCartItem(string $name, string $price, string $quantity, array $options): Collection
+    {
+        $price = floatval($price);
+        $quantity = intval($quantity);
+
+        if ($quantity < 1) {
+            $quantity = 1;
+        }
+
+        return collect([
+            'name' => $name,
+            'price' => $price,
+            'quantity' => $quantity,
+            'options' => $options,
+        ]);
+    }
+
+    protected function put(array $data): void
+    {
+        $session = $this->get();
+        $data = array_merge($session, $data);
+        $this->session->put(self::DEFAULT_INSTANCE, $data);
+    }
+
+    protected function putContent(Collection $content): void
+    {
+        $data = [
+            'content' => $content
+        ];
+        $this->put($data);
     }
 
     /**
@@ -120,12 +178,11 @@ class CartService
 
     public function addCoupon(Coupon $coupon)
     {
-        if ($coupon && $coupon->discount)
-        {
+        if ($coupon && $coupon->discount) {
             $this->put([
                 'coupon' => [
-                    'id'    => $coupon->id,
-                    'discount'  => $coupon->discount,
+                    'id' => $coupon->id,
+                    'discount' => $coupon->discount,
                 ]
             ]);
         }
@@ -137,8 +194,7 @@ class CartService
         $ids = $content->keys()->push(0)->all();
         $products = Product::whereIn('id', $ids)->get()->keyBy('id');
 
-        foreach ($content as $id => $cartItem)
-        {
+        foreach ($content as $id => $cartItem) {
             $cartItem->put('price', $products[$id]->price);
             $content->put($id, $cartItem);
         }
@@ -167,6 +223,16 @@ class CartService
     }
 
     /**
+     * Returns formatted total price of the items in the cart.
+     *
+     * @return string
+     */
+    public function total(): string
+    {
+        return number_format($this->totalValue(), 2);
+    }
+
+    /**
      * Returns total price of the items in the cart.
      *
      * @return float
@@ -185,26 +251,6 @@ class CartService
         $this->total = $total;
 
         return $this->total;
-    }
-    /**
-     * Returns formatted total price of the items in the cart.
-     *
-     * @return string
-     */
-    public function total(): string
-    {
-        return number_format($this->totalValue(), 2);
-    }
-
-    /**
-     * Returns total price without VAT and taxes
-     *
-     * @return string
-     */
-    public function untaxedSubtotal(): string
-    {
-        $result = $this->subtotal() - $this->vatValue() + $this->discount();
-        return number_format($result, 2);
     }
 
     /**
@@ -232,6 +278,46 @@ class CartService
     }
 
     /**
+     * Calculate discount by coupon
+     * @return float
+     */
+    public function discountCoupon(): float
+    {
+        if ($this->discountCoupon) {
+            return $this->discountCoupon;
+        }
+        $result = 0;
+
+        $coupon = $this->get()['coupon'];
+        if ($coupon) {
+            $result = $this->subtotal() * ($coupon['discount'] / 100);
+        }
+
+        $this->discountCoupon = $result ?: 0;
+
+        return $this->discountCoupon;
+    }
+
+    public function deliveryCost(): float
+    {
+        $deliveryCost = 5.00;
+        $freeDeliveryLimit = 30;
+        $result = ($this->subtotal() >= $freeDeliveryLimit) ? 0 : $deliveryCost;
+        return $result;
+    }
+
+    /**
+     * Returns total price without VAT and taxes
+     *
+     * @return string
+     */
+    public function untaxedSubtotal(): string
+    {
+        $result = $this->subtotal() - $this->vatValue() + $this->discount();
+        return number_format($result, 2);
+    }
+
+    /**
      * Returns vat value of the items in the cart.
      *
      * @return float
@@ -241,10 +327,47 @@ class CartService
         if (!$this->vat) {
             $total = $this->totalValue();
             $vatPerc = SiteHelper::country()->vat;
-            $this->vat = round($total - $total/(1+$vatPerc/100), 2);
+            $this->vat = round($total - $total / (1 + $vatPerc / 100), 2);
         }
 
         return $this->vat;
+    }
+
+    public function discount(): float
+    {
+        if ($this->discount) {
+            return $this->discount;
+        }
+        $products = $this->products();
+
+        $result = $products->reduce(function ($result, $product) {
+            return $result += $product->quantity * ($product->regular_price - $product->price);
+        });
+
+        $this->discount = $result ?: 0;
+
+        return $this->discount;
+    }
+
+    /**
+     * Returns Products
+     *
+     * @return Collection
+     */
+    public function products(): Collection
+    {
+        $content = $this->getContent();
+        $ids = $content->keys()->push(0)->all();
+        $products = Product::whereIn('id', $ids)->get();
+
+        foreach ($products as $key => $product) {
+            $product->setAttribute('r_price', $product->regular_price);
+            $product->setAttribute('quantity', $content[$product->id]['quantity']);
+            $product->setAttribute('amount', number_format($product->price * $product->quantity, 2));
+            $products->put($key, $product);
+        }
+
+        return $products;
     }
 
     /**
@@ -255,52 +378,6 @@ class CartService
     public function vat(): string
     {
         return number_format($this->vatValue(), 2);
-    }
-
-    public function discount() : float
-    {
-        if ($this->discount) {
-            return $this->discount;
-        }
-        $products = $this->products();
-
-        $result = $products->reduce(function ($result, $product) {
-            return $result += $product->quantity*($product->regular_price - $product->price);
-        });
-
-        $this->discount = $result ?: 0;
-
-        return $this->discount;
-    }
-
-    /**
-     * Calculate discount by coupon
-     * @return float
-     */
-    public function discountCoupon() : float
-    {
-        if ($this->discountCoupon) {
-            return $this->discountCoupon;
-        }
-        $result = 0;
-
-        $coupon = $this->get()['coupon'];
-        if ($coupon)
-        {
-            $result = $this->subtotal() * ($coupon['discount']/100) ;
-        }
-
-        $this->discountCoupon = $result ?: 0;
-
-        return $this->discountCoupon;
-    }
-
-    public function deliveryCost() : float
-    {
-        $deliveryCost = 5.00;
-        $freeDeliveryLimit = 30;
-        $result = ($this->subtotal() >= $freeDeliveryLimit) ? 0: $deliveryCost;
-        return $result;
     }
 
     /**
@@ -319,100 +396,19 @@ class CartService
         return intval($result);
     }
 
-    /**
-     * Returns Products
-     *
-     * @return Collection
-     */
-    public function products(): Collection
-    {
-        $content = $this->getContent();
-        $ids = $content->keys()->push(0)->all();
-        $products = Product::whereIn('id', $ids)->get();
-
-        foreach ($products as $key => $product) {
-            $product->setAttribute('r_price', $product->regular_price);
-            $product->setAttribute('quantity', $content[$product->id]['quantity']);
-            $product->setAttribute('amount', number_format($product->price*$product->quantity, 2));
-            $products->put($key, $product);
-        }
-
-        return $products;
-    }
-
     public function getCoupon()
     {
         $coupon = $this->get()['coupon'];
-        if ($coupon)
-        {
+        if ($coupon) {
             return Coupon::find($coupon['id']);
         }
     }
 
-    /**
-     * Returns the content of the cart.
-     *
-     * @return Illuminate\Support\Collection
-     */
-    protected function getContent(): Collection
+    public function orderId($orderId = null)
     {
-        return $this->get()['content'];
-    }
-
-    /**
-     * Creates a new cart item from given inputs.
-     *
-     * @param string $name
-     * @param string $price
-     * @param string $quantity
-     * @param array $options
-     * @return Illuminate\Support\Collection
-     */
-    protected function createCartItem(string $name, string $price, string $quantity, array $options): Collection
-    {
-        $price = floatval($price);
-        $quantity = intval($quantity);
-
-        if ($quantity < 1) {
-            $quantity = 1;
-        }
-
-        return collect([
-            'name' => $name,
-            'price' => $price,
-            'quantity' => $quantity,
-            'options' => $options,
-        ]);
-    }
-
-    public function orderId($orderId = null) {
         if ($orderId) {
             $this->put(['order_id' => $orderId]);
         }
         return $this->get()['order_id'];
-    }
-
-    protected function putContent(Collection $content): void
-    {
-        $data = [
-            'content'   => $content
-        ];
-        $this->put($data);
-    }
-
-    protected function put(array $data): void
-    {
-        $session = $this->get();
-        $data = array_merge($session, $data);
-        $this->session->put(self::DEFAULT_INSTANCE, $data);
-    }
-
-    protected function get(): array
-    {
-        return $this->session->has(self::DEFAULT_INSTANCE) ? $this->session->get(self::DEFAULT_INSTANCE) : [
-            'content' => collect([]),
-            'order_id'  => null,
-            'coupon'  => null,
-        ];
     }
 }

@@ -2,22 +2,33 @@
 
 namespace App\Http\Controllers;
 
-use App\Helpers\SiteHelper;
-use App\Models\Product;
+use App\Events\checkOutEvent;
+use Cart;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class CartController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index()
     {
-        $products = \Cart::products();
-
+        $products = Cart::products();
+        event(new checkOutEvent($products,'view_cart'));
         return view('cart.index', compact('products'));
+    }
+
+    public function bulkAdd(Request $request)
+    {
+        $productIds = $request->input('products');
+
+        Cart::add($productIds);
+
+        return $this->response();
     }
 
     public function add(Request $request)
@@ -25,54 +36,45 @@ class CartController extends Controller
         $productId = intval($request->input('id'));
         $qty = intval($request->input('qty', 1));
 
-        \Cart::add($productId, $qty);
+        Cart::add($productId, $qty);
 
         return $this->response();
     }
 
-    public function bulkAdd(Request $request)
+    protected function response(): JsonResponse
     {
-        $productIds = $request->input('products');
-
-        \Cart::add($productIds);
-
-        return $this->response();
+        return response()->json(
+            [
+                'status' => 1,
+                'count' => Cart::quantity(),
+                'subtotal' => Cart::untaxedSubtotal(),
+                'discount' => round(Cart::discount(), 2),
+                'vat' => Cart::vat(),
+                'total' => Cart::total(),
+                'delivery' => Cart::deliveryCost(),
+                'content' => view('partials._cart')->render(),
+            ]
+        );
     }
 
     public function remove(Request $request)
     {
         $productId = intval($request->input('id'));
 
-        \Cart::remove($productId);
+        Cart::remove($productId);
 
         $result = [
-            'status'    => 1,
-            'count'     => \Cart::quantity(),
-            'total'     => \Cart::total(),
-            'subtotal'     => \Cart::untaxedSubtotal(),
+            'status' => 1,
+            'count' => Cart::quantity(),
+            'total' => Cart::total(),
+            'subtotal' => Cart::untaxedSubtotal(),
         ];
 
-        if (0 == \Cart::quantity()) {
+        if (0 == Cart::quantity()) {
             $result['content'] = view('partials._cart')->render();
         }
 
         return response()->json($result);
-    }
-
-    protected function response(): \Illuminate\Http\JsonResponse
-    {
-        return response()->json(
-            [
-                'status'    => 1,
-                'count'     => \Cart::quantity(),
-                'subtotal'  => \Cart::untaxedSubtotal(),
-                'discount'  => round(\Cart::discount(), 2),
-                'vat'       => \Cart::vat(),
-                'total'     => \Cart::total(),
-                'delivery'  => \Cart::deliveryCost(),
-                'content'   => view('partials._cart')->render(),
-            ]
-        );
     }
 
 }

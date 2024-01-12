@@ -2,17 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\AnalyticsEvent;
+use App\Events\ViewItemEvent;
 use App\Helpers\SiteHelper;
 use App\Models\Feature;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class ProductController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index(Request $request)
     {
@@ -27,8 +30,8 @@ class ProductController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  \App\Models\Product  $product
-     * @return \Illuminate\Http\Response
+     * @param Product $product
+     * @return Response
      */
     public function show(Product $product)
     {
@@ -36,14 +39,13 @@ class ProductController extends Controller
         unset($lastViewed[$product->id]);
         if ($lastViewed) {
             $lastViewedProducts = Product::whereIn('id', $lastViewed)->limit(4)->get();
-        }
-        else {
+        } else {
             $lastViewedProducts = [];
         }
 
         $features = Feature::all()->keyBy('key');
         $reviews = $product->reviews()->paginate(5);
-
+        event(new AnalyticsEvent($product));
         return view('products.show', compact('product', 'lastViewedProducts', 'features', 'reviews'));
     }
 }

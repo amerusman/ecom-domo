@@ -3,25 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Enums\OrderStatus;
-use App\Events\OrderPaid;
+use App\Events\checkOutEvent;
 use App\Facades\Cart;
 use App\Helpers\SiteHelper;
 use App\Models\Address;
 use App\Models\Order;
-use App\Models\Product;
-use App\Services\PaySalsaService;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Stripe\Exception\ApiErrorException;
 use Stripe\PaymentIntent;
 use Stripe\Stripe;
+use Stripe\StripeClient;
 
 class CheckoutController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index()
     {
@@ -35,20 +35,18 @@ class CheckoutController extends Controller
         $total = \Cart::totalValue();
 
         $vatPerc = SiteHelper::country()->vat;
-        $vat = round($total - $total/(1+$vatPerc/100), 2);
+        $vat = round($total - $total / (1 + $vatPerc / 100), 2);
         $subtotal = $total - $vat;
 
         if (Auth::check()) {
             $address = Auth::user()->addresses()->default()->firstOrNew();
-        }
-        else {
+        } else {
             $address = new Address;
             $address->country_id = SiteHelper::country()->id;
         }
         $shipping = null;
 
-        if (\Cart::orderId())
-        {
+        if (\Cart::orderId()) {
             $order = Order::findOrFail(\Cart::orderId());
             if ($order->status == OrderStatus::Processing) {
                 \Cart::clear();
@@ -77,13 +75,13 @@ class CheckoutController extends Controller
                     'quantity' => $item['quantity'],
                     'amount' => $item['amount'],
                     'name' => $item['name'],
-                    ];
+                ];
             })->toArray();
             $order->save();
 
-            $address = (object) $order->billing;
+            $address = (object)$order->billing;
             if ($order->billing != $order->shipping) {
-                $shipping = (object) $order->shipping;
+                $shipping = (object)$order->shipping;
             }
 
             Stripe::setApiKey(env('STRIPE_SECRET'));
@@ -96,13 +94,12 @@ class CheckoutController extends Controller
                         'enabled' => true,
                     ],
 //                    'customer'  => $order->user->id,
-                    'metadata'  => [
-                        'order_id'  => $order->id
+                    'metadata' => [
+                        'order_id' => $order->id
                     ]
                 ]);
                 $clientSecret = $paymentIntent->client_secret;
-            }
-            catch (ApiErrorException $e) {
+            } catch (ApiErrorException $e) {
                 http_response_code(400);
                 dump($e->getError()->message);
                 error_log($e->getError()->message);
@@ -116,20 +113,37 @@ class CheckoutController extends Controller
             $paySystem = new PaySalsaService();
             $paymentMethods = $paySystem->getPaymentMethods(Auth::user()->id, SiteHelper::countryCode(), Auth::user()->created_at);
             */
-        }
-        else {
+        } else {
             $order = null;
             $clientSecret = null;
         }
+        event(new checkOutEvent($products,'begin_checkout'));
 
         return view('checkout.index', compact('products', 'cart', 'subtotal', 'total', 'vat', 'address', 'shipping', 'order', 'clientSecret'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return Response
+     */
+    public function create()
+    {
+        /*
+        if (\Cart::orderId()) {
+            dump(\Cart::orderId());
+            $order = Order::findOrFail(\Cart::orderId());
+            \Cart::clear();
+            OrderPaid::dispatch($order);
+        }
+        //*/
     }
 
     public function success()
     {
         $orderId = \Cart::orderId();
         if (request()->get('payment_intent')) {
-            $stripe = new \Stripe\StripeClient([
+            $stripe = new StripeClient([
                 'api_key' => env('STRIPE_SECRET')
             ]);
             // Returning after redirecting to a payment method portal.
@@ -147,7 +161,8 @@ class CheckoutController extends Controller
             <p>Currency: <?= $paymentIntent->currency; ?></p>
             <p>Payment Method: <?= $paymentIntent->payment_method; ?></p>
          */
-
+        $detail= array('paymentIntentId'=>$paymentIntent->id,'paymentamount'=>$paymentIntent->amount);
+        event(new checkOutEvent($detail,'purchase'));
         return view('checkout.success', compact('orderId'));
     }
 
@@ -157,27 +172,10 @@ class CheckoutController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function create()
-    {
-        /*
-        if (\Cart::orderId()) {
-            dump(\Cart::orderId());
-            $order = Order::findOrFail(\Cart::orderId());
-            \Cart::clear();
-            OrderPaid::dispatch($order);
-        }
-        //*/
-    }
-
-    /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @param Request $request
+     * @return Response
      */
     public function store(Request $request)
     {
@@ -187,8 +185,8 @@ class CheckoutController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @param int $id
+     * @return Response
      */
     public function show($id)
     {
@@ -198,8 +196,8 @@ class CheckoutController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @param int $id
+     * @return Response
      */
     public function edit($id)
     {
@@ -209,9 +207,9 @@ class CheckoutController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @param Request $request
+     * @param int $id
+     * @return Response
      */
     public function update(Request $request, $id)
     {
