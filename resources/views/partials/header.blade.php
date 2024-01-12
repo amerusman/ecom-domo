@@ -35,11 +35,11 @@
             </li>
             <li class="menu-item">
                 <a href="{{ route('trending') }}">{{ Trans::__('trending') }}</a>
-            </li> --}}
+            </li>
 
             <li class="menu-item">
                 <a href="{{ route('pages.show', 'about-brand') }}">{{ $pages['about-brand'] }}</a>
-            </li>
+            </li>--}}
             <li class="menu-item hidden">
                 <a href="{{ route('products.index') }}">{{ Trans::__('catalog', 'Catalog') }}</a>
             </li>
