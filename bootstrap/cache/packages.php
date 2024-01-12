@@ -11,6 +11,13 @@
       'PDF' => 'Barryvdh\\DomPDF\\Facade\\Pdf',
     ),
   ),
+  'daikazu/laravel-ga4-event-tracking' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'Daikazu\\GA4EventTracking\\ServiceProvider',
+    ),
+  ),
   'fruitcake/laravel-cors' => 
   array (
     'providers' => 
