@@ -7,6 +7,7 @@
     "require": {
         "php": "^8.1.0",
         "barryvdh/laravel-dompdf": "^2.0",
+        "daikazu/laravel-ga4-event-tracking": "dev-main",
         "fruitcake/laravel-cors": "^2.0.5",
         "guzzlehttp/guzzle": "^7.2",
         "josiasmontag/laravel-recaptchav3": "^1.0",
@@ -16,6 +17,7 @@
         "laravel/tinker": "^2.7",
         "laraveldaily/laravel-charts": "^0.2.3",
         "maatwebsite/excel": "^3.1",
+        "predis/predis": "^2.2",
         "spatie/laravel-medialibrary": "^10.0.7",
         "spatie/laravel-translatable": "^6.0",
         "srmklive/paypal": "^3.0",

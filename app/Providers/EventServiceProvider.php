@@ -2,10 +2,16 @@
 
 namespace App\Providers;
 
+use App\Events\AnalyticsEvent;
+use App\Events\checkOutEvent;
 use App\Events\OrderPaid;
+use App\Events\searchEvent;
+use App\Listeners\AnalyticsEventListener;
 use App\Listeners\CartChangeCountry;
+use App\Listeners\checkOutListener;
 use App\Listeners\CreateDelivery;
 use App\Listeners\ProcessOrder;
+use App\Listeners\searchEventListener;
 use App\Listeners\SendOrderCreatedNotification;
 use App\Listeners\SendProcessOrderNotification;
 use App\Listeners\SendUserRegisterMail;
@@ -34,6 +40,15 @@ class EventServiceProvider extends ServiceProvider
             ProcessOrder::class,
             CreateDelivery::class,
             SendOrderCreatedNotification::class,
+        ],
+        AnalyticsEvent::class => [
+            AnalyticsEventListener::class
+        ],
+        checkOutEvent::class => [
+            checkOutListener::class
+        ],
+        searchEvent::class => [
+            searchEventListener::class
         ]
     ];
 
