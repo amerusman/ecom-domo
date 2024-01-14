@@ -32,13 +32,14 @@ class checkOutListener
 
         if ($eventType == 'purchase') {
             $product = $event->cdata;
-            $orderId=$product['orderId'];
+            $orderId = $product['orderId'];
             $order = Order::findOrFail($orderId);
             $itemDataArray = [];
-           foreach ($order->items as $item) {
+            foreach ($order->items as $item) {
 
                 $itemData = [
                     'item_id' => $item['sku'],
+                    'item_name' => $item['name'],
                     'currency' => 'EUR',
                     'quantity' => $item['quantity'],
                 ];
@@ -55,21 +56,21 @@ class checkOutListener
                     'items' => [$itemDataArray],
                 ],
             ];
-        } elseif (in_array($eventType, ['add_to_cart', 'view_item','view_cart','begin_checkout'])) {
+        } elseif (in_array($eventType, ['add_to_cart', 'view_item', 'view_cart', 'begin_checkout'])) {
             $products = $event->cdata;
 
             $itemDataArray = [];
-            $products_value=0;
+            $products_value = 0;
             foreach ($products as $product) {
 
-                $products_value +=$product->price;
+                $products_value += $product->price;
                 $itemData = [
-                    'item_id' => $product->sku??'',
+                    'item_id' => $product->sku ?? '',
                     'item_name' => $product->brand->name . ' ' . $product->name,
                     'currency' => 'EUR',
-                    'discount' => $product->discount??'',
-                    'price' => $product->price??'',
-                    'quantity' => $product->quantity??'',
+                    'discount' => $product->discount ?? '',
+                    'price' => $product->price ?? '',
+                    'quantity' => $product->quantity ?? '',
                 ];
 
                 $itemDataArray[] = $itemData;
@@ -79,7 +80,7 @@ class checkOutListener
                 'name' => $eventType,
                 'params' => [
                     'currency' => 'EUR',
-                    'value' => $products_value??'',
+                    'value' => $products_value ?? '',
                     'items' => [$itemDataArray],
                 ],
             ];
