@@ -33,32 +33,35 @@ class checkOutListener
         if ($eventType == 'purchase') {
             $product = $event->cdata;
             $orderId = $product['orderId'];
-            $order = Order::findOrFail($orderId);
+            $order = Order::where('status', 'completed')->find($orderId);
+
             $itemDataArray = [];
-            foreach ($order->items as $item) {
+            if ($order !== null) {
+                $paymentDetail = $order->payment;
+                foreach ($order->items as $item) {
 
-                $itemData = [
-                    'item_id' => $item['sku'],
-                    'item_name' => $item['name'],
-                    'currency' => 'EUR',
-                    'quantity' => $item['quantity'],
+                    $itemData = [
+                        'item_id' => $item['sku'],
+                        'currency' => 'EUR',
+                        'quantity' => $item['quantity'],
+                    ];
+
+                    $itemDataArray[] = $itemData;
+                }
+
+
+                $eventData = [
+                    'name' => $eventType,
+                    'params' => [
+                        'currency' => 'EUR',
+                        'value' => $paymentDetail['amount'],
+                        'transaction_id' => $paymentDetail['id'],
+                        'items' => [$itemDataArray],
+                    ],
                 ];
-
-                $itemDataArray[] = $itemData;
             }
-
-            $eventData = [
-                'name' => $eventType,
-                'params' => [
-                    'currency' => 'EUR',
-                    'value' => $product['paymentamount'],
-                    'transaction_id' => $product['paymentIntentId'],
-                    'items' => [$itemDataArray],
-                ],
-            ];
         } elseif (in_array($eventType, ['add_to_cart', 'view_item', 'view_cart', 'begin_checkout'])) {
             $products = $event->cdata;
-
             $itemDataArray = [];
             $products_value = 0;
             foreach ($products as $product) {
