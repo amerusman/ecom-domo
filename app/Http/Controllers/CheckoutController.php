@@ -161,7 +161,7 @@ class CheckoutController extends Controller
             <p>Currency: <?= $paymentIntent->currency; ?></p>
             <p>Payment Method: <?= $paymentIntent->payment_method; ?></p>
          */
-        $detail= array('paymentIntentId'=>$paymentIntent->id,'paymentamount'=>$paymentIntent->amount);
+        $detail= array('orderId'=>$orderId);
         event(new checkOutEvent($detail,'purchase'));
         return view('checkout.success', compact('orderId'));
     }
